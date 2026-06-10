@@ -218,9 +218,9 @@ exportBtn.addEventListener('click', async () => {
 // ── View Stored Data Button Handler ──────────────────────────────────
 viewBtn.addEventListener('click', async () => {
   try {
-    const viewerUrl = chrome.runtime.getURL('src/popup/viewer.html');
-    await chrome.tabs.create({ url: viewerUrl });
+    const dashboardUrl = chrome.runtime.getURL('dashboard.html');
+    await chrome.tabs.create({ url: dashboardUrl });
   } catch (error) {
-    console.error(`${POPUP_LOG} Error opening viewer:`, error);
+    console.error(`${POPUP_LOG} Error opening dashboard:`, error);
   }
 });

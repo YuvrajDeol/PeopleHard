@@ -1,4 +1,5 @@
 import { Course } from "./cgpa";
+import { parseImport } from "./parseImport";
 
 /**
  * Safely accesses localStorage in Next.js (SSR safe).
@@ -62,4 +63,40 @@ export function resetAllStoredData(): void {
   removeLocalStorageItem(STORAGE_KEYS.COURSES);
   removeLocalStorageItem(STORAGE_KEYS.CREDITS);
   removeLocalStorageItem(STORAGE_KEYS.SETTINGS);
+}
+
+/**
+ * Attempts to automatically sync course data from Chrome Extension storage.
+ * If running inside extension page environment, loads, parses, and updates localStorage.
+ */
+export function syncFromExtensionStorage(callback: (courses: Course[]) => void): void {
+  if (typeof window !== "undefined" && typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    try {
+      chrome.storage.local.get("campusPlusData", (result) => {
+        const data = result.campusPlusData as any;
+        if (data && Array.isArray(data.syncs)) {
+          // Reuse parseImport helper to parse and deduplicate
+          const parsed = parseImport(JSON.stringify(data));
+          if (!parsed.error && parsed.courses.length > 0) {
+            const existingCourses = getStoredCourses();
+            const newCoursesMap: Record<string, Course> = {};
+
+            for (const course of parsed.courses) {
+              if (!course.courseCode) continue;
+              newCoursesMap[course.courseCode] = {
+                ...existingCourses[course.courseCode],
+                ...course
+              };
+            }
+
+            setStoredCourses(newCoursesMap);
+            callback(Object.values(newCoursesMap));
+            console.log("[PeopleHard] Successfully auto-synced data from Chrome Extension storage.");
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("[PeopleHard] Failed to query chrome.storage.local:", e);
+    }
+  }
 }

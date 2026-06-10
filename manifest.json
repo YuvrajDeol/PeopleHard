@@ -21,10 +21,18 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://campus.thapar.edu/*"],
-      "js": ["src/utils/extractors.js", "src/content/content.js"],
+      "matches": [
+        "https://campus.thapar.edu/*"
+      ],
+      "js": [
+        "src/utils/extractors.js",
+        "src/content/content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'sha256-n46vPwSWuMC0W703pBofImv82Z26xo4LXymv0E9caPk=' 'sha256-OBTN3RiyCV4Bq7dFqZ5a2pAXjnCcCYeTJMO2I/LYKeo=' 'sha256-QuPJc0wYq6c4/aIZ7Gjvu8QyKulDBZ0xMBWkeUd5cLI=' 'sha256-ZZMt2curFcVZO26yxaDQy2sVv7rSsb3HFLlqoj+Dkxw=' 'sha256-lxhDnbc+JW5RwiDmzNe/E4uZzX9gV+a8L4bZBBCo1D4=' 'sha256-E7rC4mqDTMqvvA3OJF3uSPVwnekVy5o+uXPcIZzl1k4=' 'sha256-psyAag2OvqtzL55P9WdALxmXluK3LYq+VtgpjM09dng=' 'sha256-LS94Ga3izXFO4ZLagN94AABpZ2zCjx9iBZUpjnkJ+OY=' 'sha256-PuRK17FaJSxqri2PfdxXtVXKt3SLWvLfO3uxjtdEuhk=' 'sha256-R4STuaYZqRTBYvt9+fbTfa1A4SMdnyH+yJBRIAfMpYg=' 'sha256-nzmdl+AXdlsLPaG5B+ouuCXbm2uL+onDzFRTXheLkqo=' 'sha256-CoydvEDBbAq8InqY+xMQi92yYGaherSMV+JnhDWk3i0=' 'sha256-z7TMhkfyvkbHIB7vMVNjvX3aCyu3ErAll5q0uYo4XHA=' 'sha256-iE1LFhNxS4kB8dR6Gv1lbtWRMCBZvzRFJ3JZSCzRaWw=' 'sha256-SqYhAn/15uHZSz1rpV85eKCFzPMWSajMcjGVtnOF1B8=' 'sha256-zmtb9bSQzf3xgJDnayAL8bqA4YWYxk4TOdlDxwjeow8=' 'sha256-Fgq3YXTBkdz1Qn018Se82kt5QY48kk8j1kpeKtC83V8=' 'sha256-Avjs/CXiaunPU8d/PfawLkA+LM/v28wA20oY6Bte098=' 'sha256-Hwwk+e143tADkcMqijuGHf1xQPUtg235/E8C51ocHG0=' 'sha256-0Lg8c2aF7dWHCmNhjUfSx8LrJb6mO4pf2nhF0MGnOik=' 'sha256-TCnUkuJumW8GMpMlzCyJsadkWErCpH5n8vPJqbgW3B8=' 'sha256-5WAJa39YOyf3OWaZwtJeEZi2plG/D1TWC/Vqg5BlC/s=' 'sha256-XR2ell4tp6/M9tB6jBNxTj7CleSUckwQwweuZaFw5wc=' 'sha256-G0vnQW1dR0qh8lbPf1oMBmUA+BIFtXucngyA7MmCNjw='; object-src 'self';"
+  }
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Course } from "@/lib/cgpa";
-import { getStoredCourses, getStoredCredits } from "@/lib/storage";
+import { getStoredCourses, getStoredCredits, syncFromExtensionStorage } from "@/lib/storage";
 import AnalyticsChart from "@/components/AnalyticsChart";
 import { BarChart3 } from "lucide-react";
 
@@ -16,6 +16,11 @@ export default function AnalyticsPage() {
     setCourses(Object.values(getStoredCourses()));
     setCredits(getStoredCredits());
     setLoading(false);
+
+    // Auto-sync from Chrome Extension storage if running in extension context
+    syncFromExtensionStorage((updatedCourses) => {
+      setCourses(updatedCourses);
+    });
   }, []);
 
   if (loading) {

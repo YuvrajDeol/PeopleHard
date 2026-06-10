@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import ImportButton from "@/components/ImportButton";
-import { getStoredCourses, getStoredCredits, resetAllStoredData, STORAGE_KEYS } from "@/lib/storage";
+import { getStoredCourses, getStoredCredits, resetAllStoredData, STORAGE_KEYS, syncFromExtensionStorage } from "@/lib/storage";
 import { 
   Settings, 
   Download, 
@@ -25,6 +25,11 @@ export default function SettingsPage() {
   useEffect(() => {
     const courses = getStoredCourses();
     setHasData(Object.keys(courses).length > 0);
+
+    // Auto-sync from Chrome Extension storage if running in extension context
+    syncFromExtensionStorage((updatedCourses) => {
+      setHasData(updatedCourses.length > 0);
+    });
   }, []);
 
   const handleImportSuccess = () => {

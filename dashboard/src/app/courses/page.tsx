@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Course } from "@/lib/cgpa";
-import { getStoredCourses, getStoredCredits, setStoredCredits } from "@/lib/storage";
+import { getStoredCourses, getStoredCredits, setStoredCredits, syncFromExtensionStorage } from "@/lib/storage";
 import CourseTable from "@/components/CourseTable";
 import { BookOpen } from "lucide-react";
 
@@ -16,6 +16,11 @@ export default function CoursesPage() {
     setCourses(Object.values(getStoredCourses()));
     setCredits(getStoredCredits());
     setLoading(false);
+
+    // Auto-sync from Chrome Extension storage if running in extension context
+    syncFromExtensionStorage((updatedCourses) => {
+      setCourses(updatedCourses);
+    });
   }, []);
 
   // Handle credit value changes
