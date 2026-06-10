@@ -35,9 +35,9 @@ function getAcademicDocument() {
  */
 function looksLikeGrade(value) {
   if (!value) return false;
-  const val = value.trim();
-  const letterGradeRegex = /^(?:[A-C][+-]?|[DFIW])$/i;
-  return letterGradeRegex.test(val);
+  const val = value.trim().toUpperCase();
+  const allowed = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F", "I", "W"];
+  return allowed.includes(val);
 }
 
 /**
@@ -210,7 +210,14 @@ function extractOverallGrade(doc = document) {
   for (const el of allElements) {
     const id = el.id.toUpperCase();
     if (gradePatterns.some(pat => id.includes(pat))) {
-      const text = el.textContent.trim();
+      let text = '';
+      if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.value !== undefined) {
+        text = el.value || '';
+      }
+      if (!text.trim()) {
+        text = el.textContent || '';
+      }
+      text = text.trim();
       if (looksLikeGrade(text)) {
         console.log(`[Campus+] Found overall grade by ID (${el.id}): ${text}`);
         return text.toUpperCase();
@@ -240,41 +247,61 @@ function extractOverallGrade(doc = document) {
  * @returns {string} Overall percentage value (e.g. "67.50") or empty string
  */
 function extractOverallPercentage(doc = document) {
-  const elements = doc.querySelectorAll('span, div, td, th, label');
-  const percentagePattern = /\b([1-9]\d(?:\.\d{1,2})?|100(?:\.0+)?)\b/;
+  const elements = doc.querySelectorAll('span, div, td, th, label, b, strong');
+  const percentagePattern = /\b(\d{1,3}(?:\.\d{1,2})?)\b/;
 
-  let overallPct = '';
+  // Helper to check if element context belongs to Mid-Term Grade / MST
+  function isMidTermContext(el) {
+    let current = el;
+    while (current) {
+      const text = current.textContent || '';
+      if (/mid[- ]?term|mst/i.test(text)) {
+        return true;
+      }
+      if (current.id && /mid[- ]?term|mst/i.test(current.id)) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  }
 
+  // 1. Search around "Current Overall Grade" label section
   for (const el of elements) {
     const text = el.textContent.trim();
     if (!text) continue;
 
-    if (/overall\s*grade/i.test(text) || /overall\s*percentage/i.test(text) || /overall\s*mark/i.test(text)) {
+    if (/overall\s*grade/i.test(text) || /overall\s*percentage/i.test(text) || /overall\s*mark/i.test(text) || /current\s*overall/i.test(text)) {
       const match = text.match(percentagePattern);
       if (match) {
         const val = parseFloat(match[1]);
-        if (val > 0 && val <= 100) {
-          overallPct = match[1];
-          return overallPct;
+        if (val >= 0 && val <= 100) {
+          if (val === 0 && isMidTermContext(el)) {
+            continue;
+          }
+          if (!isMidTermContext(el)) {
+            console.log(`[Campus+] Found overall percentage in text: ${match[1]}`);
+            return match[1];
+          }
         }
       }
 
       const parent = el.parentElement;
       if (parent) {
-        const siblingElements = parent.querySelectorAll('span, div, td');
+        const siblingElements = parent.querySelectorAll('span, div, td, th');
         for (const sib of siblingElements) {
           const sibText = sib.textContent.trim();
           const match = sibText.match(percentagePattern);
           if (match) {
             const val = parseFloat(match[1]);
-            const parentText = parent.textContent.toLowerCase();
-            const containerText = (sib.parentElement ? sib.parentElement.textContent.toLowerCase() : '') + ' ' + parentText;
-            if (containerText.includes('mid-term') || containerText.includes('mid term') || containerText.includes('mst')) {
-              continue;
-            }
-            if (val > 0 && val <= 100) {
-              overallPct = match[1];
-              return overallPct;
+            if (val >= 0 && val <= 100) {
+              if (val === 0 && (isMidTermContext(sib) || isMidTermContext(el))) {
+                continue;
+              }
+              if (!isMidTermContext(sib) && !isMidTermContext(el)) {
+                console.log(`[Campus+] Found overall percentage in sibling: ${match[1]}`);
+                return match[1];
+              }
             }
           }
         }
@@ -282,45 +309,58 @@ function extractOverallPercentage(doc = document) {
     }
   }
 
+  // 2. Search IDs containing grade/percentage keywords
   const pctPatterns = ['OVERALL_GRADE', 'CRSE_GRADE', 'GRADE_INPUT', 'PERCENT', 'PCT'];
   const allElements = doc.querySelectorAll('[id]');
   for (const el of allElements) {
     const id = el.id.toUpperCase();
     if (pctPatterns.some(pat => id.includes(pat))) {
-      const text = el.textContent.trim();
-      const match = text.match(percentagePattern);
+      let text = '';
+      if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.value !== undefined) {
+        text = el.value || '';
+      }
+      if (!text.trim()) {
+        text = el.textContent || '';
+      }
+      const match = text.trim().match(percentagePattern);
       if (match) {
         const val = parseFloat(match[1]);
-        const parentText = (el.parentElement ? el.parentElement.textContent.toLowerCase() : '');
-        if (parentText.includes('mid-term') || parentText.includes('mid term') || parentText.includes('mst')) {
-          continue;
-        }
-        if (val > 0 && val <= 100) {
-          overallPct = match[1];
-          return overallPct;
+        if (val >= 0 && val <= 100) {
+          if (val === 0 && isMidTermContext(el)) {
+            continue;
+          }
+          if (!isMidTermContext(el)) {
+            console.log(`[Campus+] Found overall percentage by ID (${el.id}): ${match[1]}`);
+            return match[1];
+          }
         }
       }
     }
   }
 
+  // 3. Fallback scan on leaf text elements
   for (const el of elements) {
     if (el.children.length > 0) continue;
     const text = el.textContent.trim();
-    const match = text.match(/^\s*([1-9]\d(?:\.\d{1,2})?|100(?:\.0+)?)\s*%?\s*$/);
+    const match = text.match(/^\s*(\d{1,3}(?:\.\d{1,2})?)\s*%?\s*$/);
     if (match) {
       const val = parseFloat(match[1]);
-      const parentText = el.parentElement ? el.parentElement.textContent.toLowerCase() : '';
-      if (parentText.includes('overall') || parentText.includes('final') || parentText.includes('course grade')) {
-        if (parentText.includes('mid-term') || parentText.includes('mid term') || parentText.includes('mst')) {
-          continue;
+      if (val >= 0 && val <= 100) {
+        const parentText = el.parentElement ? el.parentElement.textContent.toLowerCase() : '';
+        if (parentText.includes('overall') || parentText.includes('final') || parentText.includes('course grade')) {
+          if (val === 0 && isMidTermContext(el)) {
+            continue;
+          }
+          if (!isMidTermContext(el)) {
+            console.log(`[Campus+] Found overall percentage in fallback: ${match[1]}`);
+            return match[1];
+          }
         }
-        overallPct = match[1];
-        return overallPct;
       }
     }
   }
 
-  return overallPct;
+  return '';
 }
 
 /**

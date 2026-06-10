@@ -29,14 +29,22 @@ function extractPageData() {
   const assignments = extractAssignments(doc);
   const semester = extractSemesterInfo(doc);
 
+  // Helper to safely parse percentage to float
+  let parsedPct = "";
+  if (overallPct) {
+    const val = parseFloat(overallPct);
+    if (!isNaN(val)) {
+      parsedPct = val;
+    }
+  }
+
   // ── Merge grades into courses ──────────────────────────────────────
   const courses = rawCourses.map((course) => {
-    const percentageNum = overallPct ? parseFloat(overallPct) : "";
     return {
       courseCode: course.courseCode,
       courseName: course.courseName,
       grade: overallGrade || "",
-      percentage: isNaN(percentageNum) ? "" : percentageNum,
+      percentage: parsedPct,
       instructor: course.instructor || '',
       assignments: [],
     };
@@ -44,12 +52,11 @@ function extractPageData() {
 
   // If we found grades but no courses, create placeholder course entries
   if (courses.length === 0 && (overallGrade || overallPct)) {
-    const percentageNum = overallPct ? parseFloat(overallPct) : "";
     courses.push({
       courseCode: '',
       courseName: doc.title || document.title || 'Unknown Course',
       grade: overallGrade || "",
-      percentage: isNaN(percentageNum) ? "" : percentageNum,
+      percentage: parsedPct,
       instructor: '',
       assignments: [],
     });
