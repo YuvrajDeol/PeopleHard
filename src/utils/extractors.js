@@ -36,10 +36,48 @@ function getAcademicDocument() {
 function looksLikeGrade(value) {
   if (!value) return false;
   const val = value.trim();
-  const letterGradeRegex = /^(?:[A-D][+-]?|[FIW])$/i;
+  const letterGradeRegex = /^(?:[A-E][+-]?|[FIWX])$/i;
   const numericGradeRegex = /^(?:10(?:\.00?)?|[0-9]\.[0-9]{1,2})$/;
-  const percentageRegex = /^\d+(?:\.\d+)?%?$/;
+  const percentageRegex = /^\d+(?:\.\d+)?%$/;
   return letterGradeRegex.test(val) || numericGradeRegex.test(val) || percentageRegex.test(val);
+}
+
+/**
+ * Tries to find and extract a grade letter or GPA/percentage from a string.
+ * @param {string} text
+ * @returns {{grade: string, percentage: string}}
+ */
+function parseGradeFromString(text) {
+  if (!text) return null;
+  const clean = text.trim();
+  
+  if (looksLikeGrade(clean)) {
+    if (/^\d+(?:\.\d+)?%?$/.test(clean)) {
+      return { grade: '', percentage: clean.replace('%', '').trim() };
+    } else {
+      return { grade: clean.toUpperCase(), percentage: '' };
+    }
+  }
+
+  const pctMatch = clean.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (pctMatch) {
+    const num = parseFloat(pctMatch[1]);
+    if (num >= 0 && num <= 100) {
+      return { grade: '', percentage: pctMatch[1] };
+    }
+  }
+
+  const gradeLabelMatch = clean.match(/(?:grade|grd|mark|gpa)\s*[:=-]?\s*\b([A-E][+-]?|[FIWX])\b/i);
+  if (gradeLabelMatch) {
+    return { grade: gradeLabelMatch[1].toUpperCase(), percentage: '' };
+  }
+
+  const gpaMatch = clean.match(/(?:gpa|g.p.a|cgpa)\s*[:=-]?\s*\b(10(?:\.00?)?|[0-9]\.[0-9]{1,2})\b/i);
+  if (gpaMatch) {
+    return { grade: gpaMatch[1], percentage: '' };
+  }
+
+  return null;
 }
 
 /**
@@ -52,7 +90,7 @@ function extractCourseInfo(doc = document) {
   const seen = new Set();
 
   // Strategy 1: Find elements by PeopleSoft ID patterns for courses
-  const crsePatterns = ['CRSE', 'COURSE', 'CLASS_NAME', 'SUBJECT', 'CATALOG'];
+  const crsePatterns = ['CRSE', 'COURSE', 'CLASS_NAME', 'SUBJECT', 'CATALOG', 'DESCR'];
   const allElements = doc.querySelectorAll('[id]');
 
   for (const el of allElements) {
@@ -76,7 +114,7 @@ function extractCourseInfo(doc = document) {
             courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
             
             // Skip general navigation strings
-            if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book')) {
+            if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
               continue;
             }
 
@@ -96,8 +134,8 @@ function extractCourseInfo(doc = document) {
     }
   }
 
-  // Strategy 2: Search PeopleSoft tables for course data inside doc
-  const tables = doc.querySelectorAll('table.PSLEVEL1GRID, table.PSLEVEL2GRID, table.PSLEVEL1GRIDWBO');
+  // Strategy 2: Search tables for course data inside doc
+  const tables = doc.querySelectorAll('table');
   for (const table of tables) {
     const rows = table.querySelectorAll('tr');
     for (const row of rows) {
@@ -111,7 +149,7 @@ function extractCourseInfo(doc = document) {
           let courseName = text.replace(courseMatch[0], '').trim();
           courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
           
-          if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book')) {
+          if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
             continue;
           }
 
@@ -126,6 +164,43 @@ function extractCourseInfo(doc = document) {
           console.log(`${LOG_PREFIX} Found course in table: ${courseCode}`);
         }
       }
+    }
+  }
+
+  // Fallback / Strategy 3: Scan all leaf elements for course code pattern
+  if (courses.length === 0) {
+    const codeToCourse = new Map();
+    const allTextElements = doc.querySelectorAll('span, div, td, th, a, h1, h2, h3, h4, b, strong');
+    
+    for (const el of allTextElements) {
+      if (el.children.length > 0) continue;
+      const text = el.textContent.trim();
+      if (!text) continue;
+
+      const codeMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
+      if (codeMatch) {
+        const courseCode = codeMatch[1].replace(/\s+/g, '').toUpperCase();
+        let courseName = text.replace(codeMatch[0], '').trim();
+        courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
+
+        if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
+          courseName = '';
+        }
+
+        const existing = codeToCourse.get(courseCode);
+        if (!existing || (courseName && (!existing.courseName || courseName.length > existing.courseName.length))) {
+          codeToCourse.set(courseCode, {
+            courseCode: courseCode,
+            courseName: courseName || courseCode,
+            instructor: '',
+          });
+        }
+      }
+    }
+
+    for (const course of codeToCourse.values()) {
+      courses.push(course);
+      console.log(`${LOG_PREFIX} Fallback found course: ${course.courseCode} - ${course.courseName}`);
     }
   }
 
@@ -166,7 +241,6 @@ function extractGrades(doc = document) {
               gradeEntry.percentage = text.replace('%', '').trim();
               console.log(`${LOG_PREFIX} Found percentage: ${text}`);
             } else {
-              // Ensure we don't accidentally match page titles
               if (text.toLowerCase().includes('grade book') || text.toLowerCase().includes('assignment')) {
                 continue;
               }
@@ -184,10 +258,13 @@ function extractGrades(doc = document) {
     }
   }
 
-  // Strategy 2: Search PeopleSoft grade tables inside doc
-  const tables = doc.querySelectorAll('table.PSLEVEL1GRID, table.PSLEVEL2GRID, table.PSLEVEL1GRIDWBO');
+  // Strategy 2: Search all tables inside doc
+  const tables = doc.querySelectorAll('table');
   for (const table of tables) {
-    const headers = Array.from(table.querySelectorAll('th')).map((th) => th.textContent.trim().toUpperCase());
+    const firstRow = table.querySelector('tr');
+    if (!firstRow) continue;
+    const headers = Array.from(firstRow.querySelectorAll('th, td')).map((el) => el.textContent.trim().toUpperCase());
+    
     const gradeColIdx = headers.findIndex((h) =>
       h.includes('GRADE') || h.includes('MARK') || h.includes('GPA')
     );
@@ -209,9 +286,13 @@ function extractGrades(doc = document) {
           }
         }
         if (pctColIdx !== -1 && cells[pctColIdx]) {
-          const val = cells[pctColIdx].textContent.trim().replace('%', '');
-          if (looksLikeGrade(val)) {
-            gradeEntry.percentage = val;
+          const val = cells[pctColIdx].textContent.trim();
+          const cleanVal = val.replace('%', '').trim();
+          if (/^\d+(?:\.\d+)?$/.test(cleanVal)) {
+            const num = parseFloat(cleanVal);
+            if (num >= 0 && num <= 100) {
+              gradeEntry.percentage = cleanVal;
+            }
           }
         }
 
@@ -219,6 +300,26 @@ function extractGrades(doc = document) {
           seen.add(JSON.stringify(gradeEntry));
           grades.push(gradeEntry);
           console.log(`${LOG_PREFIX} Found grade in table: ${gradeEntry.grade || gradeEntry.percentage}`);
+        }
+      }
+    }
+  }
+
+  // Fallback / Strategy 3: Scan all leaf elements for grade/percentage patterns
+  if (grades.length === 0) {
+    const allElements = doc.querySelectorAll('span, div, td, th, b, strong');
+    for (const el of allElements) {
+      if (el.children.length > 0) continue;
+      const text = el.textContent.trim();
+      if (!text) continue;
+
+      const gradeInfo = parseGradeFromString(text);
+      if (gradeInfo) {
+        const key = JSON.stringify(gradeInfo);
+        if (!seen.has(key)) {
+          seen.add(key);
+          grades.push(gradeInfo);
+          console.log(`${LOG_PREFIX} Fallback found grade/percentage:`, gradeInfo);
         }
       }
     }
