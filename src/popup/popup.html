@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus+ Sync</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo-row">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="28" height="28" rx="8" fill="url(#grad)"/>
+            <path d="M8 14.5C8 11 10.5 8 14 8C17.5 8 20 11 20 14.5V20H16.5V14.5C16.5 12.5 15.5 11.5 14 11.5C12.5 11.5 11.5 12.5 11.5 14.5V20H8V14.5Z" fill="white" fill-opacity="0.9"/>
+            <circle cx="14" cy="7" r="1.5" fill="white" fill-opacity="0.9"/>
+            <defs>
+              <linearGradient id="grad" x1="0" y1="0" x2="28" y2="28">
+                <stop stop-color="#6366F1"/>
+                <stop offset="1" stop-color="#8B5CF6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>Campus+ Sync</h1>
+          <span class="subtitle">Thapar University</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Status Indicator -->
+    <div class="status-card" id="statusCard">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="status-info">
+        <span class="status-label">Status</span>
+        <span class="status-value" id="statusText">Ready</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button class="btn btn-primary" id="syncBtn">
+        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2.5 8C2.5 5 5 2.5 8 2.5C9.7 2.5 11.2 3.3 12.2 4.5L13.5 3V7H9.5L11 5.5C10.2 4.6 9.2 4 8 4C5.8 4 4 5.8 4 8H2.5Z" fill="currentColor"/>
+          <path d="M13.5 8C13.5 11 11 13.5 8 13.5C6.3 13.5 4.8 12.7 3.8 11.5L2.5 13V9H6.5L5 10.5C5.8 11.4 6.8 12 8 12C10.2 12 12 10.2 12 8H13.5Z" fill="currentColor"/>
+        </svg>
+        Sync Current Page
+      </button>
+
+      <button class="btn btn-secondary" id="exportBtn">
+        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 2V10M8 10L5 7M8 10L11 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 12H13V14H3V12Z" fill="currentColor"/>
+        </svg>
+        Export JSON
+      </button>
+
+      <button class="btn btn-secondary" id="viewBtn">
+        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M5 6H11M5 8.5H9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        View Stored Data
+      </button>
+    </div>
+
+    <!-- Last Sync Info -->
+    <div class="sync-info">
+      <span class="sync-label">Last Sync</span>
+      <span class="sync-value" id="lastSync">Never</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span class="footer-text">v1.0.0 · Only active on campus.thapar.edu</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

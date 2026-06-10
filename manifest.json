@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Campus+ Sync",
+  "version": "1.0.0",
+  "description": "Automatically extract and sync academic data from Thapar University's Oracle PeopleSoft portal.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://campus.thapar.edu/*"
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "Campus+ Sync"
+  },
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://campus.thapar.edu/*"],
+      "js": ["src/utils/extractors.js", "src/content/content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus+ Sync — Stored Data</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    /* Viewer-specific styles */
+    body {
+      min-height: 100vh;
+      width: 100%;
+      max-width: 100%;
+      padding: 0;
+      margin: 0;
+    }
+
+    .viewer-container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px;
+    }
+
+    .viewer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .viewer-header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366F1, #8B5CF6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin: 0;
+    }
+
+    .viewer-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .viewer-stats {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.15);
+      border-radius: 12px;
+      padding: 16px 20px;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #6366F1;
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 4px;
+    }
+
+    .json-container {
+      background: #0F172A;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 16px;
+      padding: 24px;
+      overflow-x: auto;
+      position: relative;
+    }
+
+    .json-container pre {
+      margin: 0;
+      font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #E2E8F0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* JSON syntax highlighting */
+    .json-key { color: #818CF8; }
+    .json-string { color: #34D399; }
+    .json-number { color: #F59E0B; }
+    .json-boolean { color: #FB923C; }
+    .json-null { color: #94A3B8; }
+    .json-bracket { color: #64748B; }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 24px;
+      color: #64748B;
+    }
+
+    .empty-state svg {
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state h2 {
+      font-size: 18px;
+      color: #94A3B8;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+    }
+
+    .copy-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1E293B;
+      color: #E2E8F0;
+      padding: 12px 24px;
+      border-radius: 12px;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      font-size: 14px;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .copy-toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="viewer-container">
+    <!-- Header -->
+    <div class="viewer-header">
+      <h1>📚 Campus+ Stored Data</h1>
+      <div class="viewer-actions">
+        <button class="btn btn-secondary btn-sm" id="copyBtn">
+          <svg class="btn-icon" width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M11 5V3.5C11 2.67 10.33 2 9.5 2H3.5C2.67 2 2 2.67 2 3.5V9.5C2 10.33 2.67 11 3.5 11H5" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          Copy JSON
+        </button>
+        <button class="btn btn-secondary btn-sm" id="clearBtn">
+          <svg class="btn-icon" width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M4 5H12L11.2 14H4.8L4 5Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M3 5H13M6.5 3H9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Clear All
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="viewer-stats" id="statsRow"></div>
+
+    <!-- JSON Display -->
+    <div id="content"></div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="copy-toast" id="toast">Copied to clipboard!</div>
+
+  <script src="viewer.js"></script>
+</body>
+</html>
