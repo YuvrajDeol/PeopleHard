@@ -30,13 +30,22 @@ function extractPageData() {
 
   // ── Merge grades into courses ──────────────────────────────────────
   const courses = rawCourses.map((course, idx) => {
-    const gradeInfo = grades[idx] || { grade: '', percentage: '' };
+    // Use the grade/percentage already associated with the course block
+    // Fall back to index alignment ONLY if the course block doesn't have it AND we only have one course
+    let gradeVal = course.grade || '';
+    let pctVal = course.percentage || '';
+    
+    if (!gradeVal && !pctVal && rawCourses.length === 1 && grades.length > 0) {
+      gradeVal = grades[0].grade || '';
+      pctVal = grades[0].percentage || '';
+    }
+
     return {
       courseCode: course.courseCode,
       courseName: course.courseName,
-      grade: gradeInfo.grade,
-      percentage: gradeInfo.percentage,
-      instructor: course.instructor,
+      grade: gradeVal,
+      percentage: pctVal,
+      instructor: course.instructor || '',
       assignments: [],
     };
   });

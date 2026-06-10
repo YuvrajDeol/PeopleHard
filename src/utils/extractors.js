@@ -43,6 +43,34 @@ function looksLikeGrade(value) {
 }
 
 /**
+ * Validates if a course code is valid according to prefix whitelist and rejects dates.
+ * @param {string} code
+ * @returns {boolean}
+ */
+function isValidCourseCode(code) {
+  if (!code) return false;
+  const cleaned = code.trim().toUpperCase();
+
+  // Reject date-like values
+  const datePattern = /^(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\d{4}$/i;
+  if (datePattern.test(cleaned)) {
+    return false;
+  }
+
+  // Extract alphabetical prefix
+  const prefixMatch = cleaned.match(/^([A-Z]{2,5})/);
+  if (!prefixMatch) return false;
+
+  const prefix = prefixMatch[1];
+  const whitelist = [
+    "UCS", "UEC", "UTA", "UMA", "UHU", "UEN", "ENC",
+    "TMA", "TCS", "TEC", "ECE", "COE", "MEE", "CHE", "CIE"
+  ];
+
+  return whitelist.includes(prefix);
+}
+
+/**
  * Tries to find and extract a grade letter or GPA/percentage from a string.
  * @param {string} text
  * @returns {{grade: string, percentage: string}}
@@ -82,93 +110,154 @@ function parseGradeFromString(text) {
 
 /**
  * Extract course information from PeopleSoft page doc.
+ * Group and associate grades with courses from the same block or row context.
  * @param {Document|Element} doc - Document to scan
- * @returns {Array<{courseCode: string, courseName: string, instructor: string}>}
+ * @returns {Array<{courseCode: string, courseName: string, grade: string, percentage: string, instructor: string}>}
  */
 function extractCourseInfo(doc = document) {
-  const courses = [];
-  const seen = new Set();
+  const courseMap = new Map();
+  const seenCodes = new Set();
 
-  // Strategy 1: Find elements by PeopleSoft ID patterns for courses
+  function getRowSuffix(id) {
+    const match = id.match(/[\$_](\d+)$/);
+    return match ? match[1] : null;
+  }
+
+  // Strategy 1: Find elements by PeopleSoft ID patterns for courses & grades
   const crsePatterns = ['CRSE', 'COURSE', 'CLASS_NAME', 'SUBJECT', 'CATALOG', 'DESCR'];
+  const gradePatterns = ['GRADE', 'GRD', 'MARK', 'SCORE', 'PERCENTAGE', 'PERCENT', 'GPA'];
   const allElements = doc.querySelectorAll('[id]');
 
   for (const el of allElements) {
-    const id = el.id.toUpperCase();
+    const id = el.id;
+    const idUpper = id.toUpperCase();
 
     // Prevent matching outer shell navigation items
-    if (id.includes('PORTLET') || id.includes('MENU') || id.includes('NAV')) {
+    if (idUpper.includes('PORTLET') || idUpper.includes('MENU') || idUpper.includes('NAV')) {
       continue;
     }
 
-    for (const pattern of crsePatterns) {
-      if (id.includes(pattern)) {
-        const text = el.textContent.trim();
-        if (text && !seen.has(text)) {
-          seen.add(text);
-          // Match Thapar course codes precisely
-          const codeMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
-          if (codeMatch) {
-            const courseCode = codeMatch[1].replace(/\s+/g, '').toUpperCase();
-            let courseName = text.replace(codeMatch[0], '').trim();
-            courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
-            
-            // Skip general navigation strings
-            if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
-              continue;
-            }
+    const suffix = getRowSuffix(id) || 'single';
 
-            if (!courseName) {
-              courseName = text;
-            }
-            courses.push({
-              courseCode: courseCode,
-              courseName: courseName,
-              instructor: '',
-            });
-            console.log(`${LOG_PREFIX} Found course: ${courseCode} - ${courseName}`);
+    if (!courseMap.has(suffix)) {
+      courseMap.set(suffix, {
+        courseCode: '',
+        courseName: '',
+        grade: '',
+        percentage: '',
+        instructor: ''
+      });
+    }
+
+    const courseObj = courseMap.get(suffix);
+    const text = el.textContent.trim();
+    if (!text) continue;
+
+    const isCrseId = crsePatterns.some(pat => idUpper.includes(pat));
+    if (isCrseId) {
+      const codeMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
+      if (codeMatch) {
+        const code = codeMatch[1].replace(/\s+/g, '').toUpperCase();
+        if (isValidCourseCode(code)) {
+          courseObj.courseCode = code;
+          let name = text.replace(codeMatch[0], '').trim();
+          name = name.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
+          if (name && !name.toLowerCase().includes('view my') && !name.toLowerCase().includes('grade book') && !name.toLowerCase().includes('student view')) {
+            courseObj.courseName = name;
           }
         }
-        break;
+      } else if (idUpper.includes('DESCR') || idUpper.includes('TITLE')) {
+        if (!text.toLowerCase().includes('view my') && !text.toLowerCase().includes('grade book') && !text.toLowerCase().includes('student view')) {
+          courseObj.courseName = text;
+        }
+      }
+    }
+
+    const isGradeId = gradePatterns.some(pat => idUpper.includes(pat));
+    if (isGradeId) {
+      const parsed = parseGradeFromString(text);
+      if (parsed) {
+        if (parsed.grade) courseObj.grade = parsed.grade;
+        if (parsed.percentage) courseObj.percentage = parsed.percentage;
       }
     }
   }
 
-  // Strategy 2: Search tables for course data inside doc
+  // Strategy 2: Search tables for course & grade data inside doc
   const tables = doc.querySelectorAll('table');
   for (const table of tables) {
     const rows = table.querySelectorAll('tr');
-    for (const row of rows) {
-      const cells = row.querySelectorAll('td, th');
-      for (const cell of cells) {
-        const text = cell.textContent.trim();
-        const courseMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
-        if (courseMatch && !seen.has(text)) {
-          seen.add(text);
-          const courseCode = courseMatch[1].replace(/\s+/g, '').toUpperCase();
-          let courseName = text.replace(courseMatch[0], '').trim();
-          courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
-          
-          if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
-            continue;
-          }
+    if (rows.length < 2) continue;
 
-          if (!courseName) {
-            courseName = text;
+    const firstRow = rows[0];
+    const headers = Array.from(firstRow.querySelectorAll('th, td')).map(el => el.textContent.trim().toUpperCase());
+    
+    const crseColIdx = headers.findIndex(h => h.includes('CRSE') || h.includes('COURSE') || h.includes('SUBJECT') || h.includes('CLASS'));
+    const gradeColIdx = headers.findIndex(h => h.includes('GRADE') || h.includes('MARK') || h.includes('GPA'));
+    const pctColIdx = headers.findIndex(h => h.includes('PERCENT') || h.includes('PCT') || h.includes('%'));
+
+    if (crseColIdx !== -1) {
+      for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].querySelectorAll('td');
+        if (cells.length === 0) continue;
+
+        const cellText = cells[crseColIdx].textContent.trim();
+        const codeMatch = cellText.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
+        if (codeMatch) {
+          const code = codeMatch[1].replace(/\s+/g, '').toUpperCase();
+          if (isValidCourseCode(code)) {
+            const suffix = `tbl_${table.id || 't'}_row_${i}`;
+            const courseObj = {
+              courseCode: code,
+              courseName: '',
+              grade: '',
+              percentage: '',
+              instructor: ''
+            };
+
+            let name = cellText.replace(codeMatch[0], '').trim();
+            name = name.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
+            courseObj.courseName = name || code;
+
+            if (gradeColIdx !== -1 && cells[gradeColIdx]) {
+              const val = cells[gradeColIdx].textContent.trim();
+              if (looksLikeGrade(val)) {
+                courseObj.grade = val;
+              }
+            }
+            if (pctColIdx !== -1 && cells[pctColIdx]) {
+              const val = cells[pctColIdx].textContent.trim();
+              const cleanVal = val.replace('%', '').trim();
+              if (/^\d+(?:\.\d+)?$/.test(cleanVal)) {
+                const num = parseFloat(cleanVal);
+                if (num >= 0 && num <= 100) {
+                  courseObj.percentage = cleanVal;
+                }
+              }
+            }
+
+            courseMap.set(suffix, courseObj);
           }
-          courses.push({
-            courseCode: courseCode,
-            courseName: courseName,
-            instructor: '',
-          });
-          console.log(`${LOG_PREFIX} Found course in table: ${courseCode}`);
         }
+      }
+    }
+  }
+
+  const finalCourses = [];
+  for (const [suffix, courseObj] of courseMap.entries()) {
+    if (courseObj.courseCode && isValidCourseCode(courseObj.courseCode)) {
+      if (!seenCodes.has(courseObj.courseCode)) {
+        seenCodes.add(courseObj.courseCode);
+        if (!courseObj.courseName) {
+          courseObj.courseName = courseObj.courseCode;
+        }
+        finalCourses.push(courseObj);
       }
     }
   }
 
   // Fallback / Strategy 3: Scan all leaf elements for course code pattern
-  if (courses.length === 0) {
+  if (finalCourses.length === 0) {
     const codeToCourse = new Map();
     const allTextElements = doc.querySelectorAll('span, div, td, th, a, h1, h2, h3, h4, b, strong');
     
@@ -180,31 +269,52 @@ function extractCourseInfo(doc = document) {
       const codeMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
       if (codeMatch) {
         const courseCode = codeMatch[1].replace(/\s+/g, '').toUpperCase();
-        let courseName = text.replace(codeMatch[0], '').trim();
-        courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
+        if (isValidCourseCode(courseCode)) {
+          let courseName = text.replace(codeMatch[0], '').trim();
+          courseName = courseName.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
 
-        if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
-          courseName = '';
-        }
+          if (courseName.toLowerCase().includes('view my') || courseName.toLowerCase().includes('grade book') || courseName.toLowerCase().includes('student view')) {
+            courseName = '';
+          }
 
-        const existing = codeToCourse.get(courseCode);
-        if (!existing || (courseName && (!existing.courseName || courseName.length > existing.courseName.length))) {
-          codeToCourse.set(courseCode, {
-            courseCode: courseCode,
-            courseName: courseName || courseCode,
-            instructor: '',
-          });
+          const existing = codeToCourse.get(courseCode);
+          if (!existing || (courseName && (!existing.courseName || courseName.length > existing.courseName.length))) {
+            codeToCourse.set(courseCode, {
+              courseCode: courseCode,
+              courseName: courseName || courseCode,
+              instructor: '',
+              grade: '',
+              percentage: ''
+            });
+          }
         }
       }
     }
 
+    // Single course page grade/percentage association fallback
+    let pageGrade = '';
+    let pagePercentage = '';
+    for (const el of allTextElements) {
+      if (el.children.length > 0) continue;
+      const text = el.textContent.trim();
+      if (!text) continue;
+      const parsed = parseGradeFromString(text);
+      if (parsed) {
+        if (parsed.grade) pageGrade = parsed.grade;
+        if (parsed.percentage) pagePercentage = parsed.percentage;
+      }
+    }
+
     for (const course of codeToCourse.values()) {
-      courses.push(course);
-      console.log(`${LOG_PREFIX} Fallback found course: ${course.courseCode} - ${course.courseName}`);
+      if (codeToCourse.size === 1) {
+        course.grade = pageGrade;
+        course.percentage = pagePercentage;
+      }
+      finalCourses.push(course);
     }
   }
 
-  return courses;
+  return finalCourses.filter(c => c.courseCode && isValidCourseCode(c.courseCode));
 }
 
 /**
@@ -216,14 +326,12 @@ function extractGrades(doc = document) {
   const grades = [];
   const seen = new Set();
 
-  // Strategy 1: Find elements by PeopleSoft GRADE ID patterns in doc
   const gradePatterns = ['GRADE', 'GRD', 'MARK', 'SCORE', 'PERCENTAGE', 'PERCENT', 'GPA'];
   const allElements = doc.querySelectorAll('[id]');
 
   for (const el of allElements) {
     const id = el.id.toUpperCase();
 
-    // Skip menu / outer elements
     if (id.includes('PORTLET') || id.includes('MENU') || id.includes('NAV')) {
       continue;
     }
@@ -258,7 +366,6 @@ function extractGrades(doc = document) {
     }
   }
 
-  // Strategy 2: Search all tables inside doc
   const tables = doc.querySelectorAll('table');
   for (const table of tables) {
     const firstRow = table.querySelector('tr');
@@ -305,7 +412,6 @@ function extractGrades(doc = document) {
     }
   }
 
-  // Fallback / Strategy 3: Scan all leaf elements for grade/percentage patterns
   if (grades.length === 0) {
     const allElements = doc.querySelectorAll('span, div, td, th, b, strong');
     for (const el of allElements) {
