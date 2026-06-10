@@ -24,44 +24,35 @@ function extractPageData() {
 
   // ── Course Information ──────────────────────────────────────────────
   const rawCourses = extractCourseInfo(doc);
-  const grades = extractGrades(doc);
+  const overallGrade = extractOverallGrade(doc);
+  const overallPct = extractOverallPercentage(doc);
   const assignments = extractAssignments(doc);
   const semester = extractSemesterInfo(doc);
 
   // ── Merge grades into courses ──────────────────────────────────────
-  const courses = rawCourses.map((course, idx) => {
-    // Use the grade/percentage already associated with the course block
-    // Fall back to index alignment ONLY if the course block doesn't have it AND we only have one course
-    let gradeVal = course.grade || '';
-    let pctVal = course.percentage || '';
-    
-    if (!gradeVal && !pctVal && rawCourses.length === 1 && grades.length > 0) {
-      gradeVal = grades[0].grade || '';
-      pctVal = grades[0].percentage || '';
-    }
-
+  const courses = rawCourses.map((course) => {
+    const percentageNum = overallPct ? parseFloat(overallPct) : "";
     return {
       courseCode: course.courseCode,
       courseName: course.courseName,
-      grade: gradeVal,
-      percentage: pctVal,
+      grade: overallGrade || "",
+      percentage: isNaN(percentageNum) ? "" : percentageNum,
       instructor: course.instructor || '',
       assignments: [],
     };
   });
 
   // If we found grades but no courses, create placeholder course entries
-  if (courses.length === 0 && grades.length > 0) {
-    for (const gradeInfo of grades) {
-      courses.push({
-        courseCode: '',
-        courseName: '',
-        grade: gradeInfo.grade,
-        percentage: gradeInfo.percentage,
-        instructor: '',
-        assignments: [],
-      });
-    }
+  if (courses.length === 0 && (overallGrade || overallPct)) {
+    const percentageNum = overallPct ? parseFloat(overallPct) : "";
+    courses.push({
+      courseCode: '',
+      courseName: doc.title || document.title || 'Unknown Course',
+      grade: overallGrade || "",
+      percentage: isNaN(percentageNum) ? "" : percentageNum,
+      instructor: '',
+      assignments: [],
+    });
   }
 
   // Assign assignments to courses, or to a general bucket if no courses found

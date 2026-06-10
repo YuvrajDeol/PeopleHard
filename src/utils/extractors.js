@@ -29,17 +29,15 @@ function getAcademicDocument() {
 
 /**
  * Validates whether a value resembles a grade.
- * Validates letter grades (A+, A, A-, B+, B, B-, C+, C, D, F, I, W), GPA (e.g. 8.45), and percentages.
+ * Validates letter grades (A+, A, A-, B+, B, B-, C+, C, C-, D, F, I, W).
  * @param {string} value
  * @returns {boolean}
  */
 function looksLikeGrade(value) {
   if (!value) return false;
   const val = value.trim();
-  const letterGradeRegex = /^(?:[A-E][+-]?|[FIWX])$/i;
-  const numericGradeRegex = /^(?:10(?:\.00?)?|[0-9]\.[0-9]{1,2})$/;
-  const percentageRegex = /^\d+(?:\.\d+)?%$/;
-  return letterGradeRegex.test(val) || numericGradeRegex.test(val) || percentageRegex.test(val);
+  const letterGradeRegex = /^(?:[A-C][+-]?|[DFIW])$/i;
+  return letterGradeRegex.test(val);
 }
 
 /**
@@ -71,119 +69,56 @@ function isValidCourseCode(code) {
 }
 
 /**
- * Tries to find and extract a grade letter or GPA/percentage from a string.
- * @param {string} text
- * @returns {{grade: string, percentage: string}}
- */
-function parseGradeFromString(text) {
-  if (!text) return null;
-  const clean = text.trim();
-  
-  if (looksLikeGrade(clean)) {
-    if (/^\d+(?:\.\d+)?%?$/.test(clean)) {
-      return { grade: '', percentage: clean.replace('%', '').trim() };
-    } else {
-      return { grade: clean.toUpperCase(), percentage: '' };
-    }
-  }
-
-  const pctMatch = clean.match(/(\d+(?:\.\d+)?)\s*%/);
-  if (pctMatch) {
-    const num = parseFloat(pctMatch[1]);
-    if (num >= 0 && num <= 100) {
-      return { grade: '', percentage: pctMatch[1] };
-    }
-  }
-
-  const gradeLabelMatch = clean.match(/(?:grade|grd|mark|gpa)\s*[:=-]?\s*\b([A-E][+-]?|[FIWX])\b/i);
-  if (gradeLabelMatch) {
-    return { grade: gradeLabelMatch[1].toUpperCase(), percentage: '' };
-  }
-
-  const gpaMatch = clean.match(/(?:gpa|g.p.a|cgpa)\s*[:=-]?\s*\b(10(?:\.00?)?|[0-9]\.[0-9]{1,2})\b/i);
-  if (gpaMatch) {
-    return { grade: gpaMatch[1], percentage: '' };
-  }
-
-  return null;
-}
-
-/**
  * Extract course information from PeopleSoft page doc.
- * Group and associate grades with courses from the same block or row context.
  * @param {Document|Element} doc - Document to scan
- * @returns {Array<{courseCode: string, courseName: string, grade: string, percentage: string, instructor: string}>}
+ * @returns {Array<{courseCode: string, courseName: string, instructor: string}>}
  */
 function extractCourseInfo(doc = document) {
-  const courseMap = new Map();
+  const courses = [];
   const seenCodes = new Set();
 
-  function getRowSuffix(id) {
-    const match = id.match(/[\$_](\d+)$/);
-    return match ? match[1] : null;
-  }
-
-  // Strategy 1: Find elements by PeopleSoft ID patterns for courses & grades
+  // Strategy 1: Find elements by PeopleSoft ID patterns for courses
   const crsePatterns = ['CRSE', 'COURSE', 'CLASS_NAME', 'SUBJECT', 'CATALOG', 'DESCR'];
-  const gradePatterns = ['GRADE', 'GRD', 'MARK', 'SCORE', 'PERCENTAGE', 'PERCENT', 'GPA'];
   const allElements = doc.querySelectorAll('[id]');
 
   for (const el of allElements) {
-    const id = el.id;
-    const idUpper = id.toUpperCase();
+    const id = el.id.toUpperCase();
 
     // Prevent matching outer shell navigation items
-    if (idUpper.includes('PORTLET') || idUpper.includes('MENU') || idUpper.includes('NAV')) {
+    if (id.includes('PORTLET') || id.includes('MENU') || id.includes('NAV')) {
       continue;
     }
 
-    const suffix = getRowSuffix(id) || 'single';
-
-    if (!courseMap.has(suffix)) {
-      courseMap.set(suffix, {
-        courseCode: '',
-        courseName: '',
-        grade: '',
-        percentage: '',
-        instructor: ''
-      });
-    }
-
-    const courseObj = courseMap.get(suffix);
-    const text = el.textContent.trim();
-    if (!text) continue;
-
-    const isCrseId = crsePatterns.some(pat => idUpper.includes(pat));
-    if (isCrseId) {
-      const codeMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
-      if (codeMatch) {
-        const code = codeMatch[1].replace(/\s+/g, '').toUpperCase();
-        if (isValidCourseCode(code)) {
-          courseObj.courseCode = code;
-          let name = text.replace(codeMatch[0], '').trim();
-          name = name.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
-          if (name && !name.toLowerCase().includes('view my') && !name.toLowerCase().includes('grade book') && !name.toLowerCase().includes('student view')) {
-            courseObj.courseName = name;
+    for (const pattern of crsePatterns) {
+      if (id.includes(pattern)) {
+        const text = el.textContent.trim();
+        if (text) {
+          const codeMatch = text.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
+          if (codeMatch) {
+            const code = codeMatch[1].replace(/\s+/g, '').toUpperCase();
+            if (isValidCourseCode(code) && !seenCodes.has(code)) {
+              seenCodes.add(code);
+              let name = text.replace(codeMatch[0], '').trim();
+              name = name.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
+              
+              if (name.toLowerCase().includes('view my') || name.toLowerCase().includes('grade book') || name.toLowerCase().includes('student view')) {
+                name = '';
+              }
+              courses.push({
+                courseCode: code,
+                courseName: name || code,
+                instructor: ''
+              });
+              console.log(`${LOG_PREFIX} Found course: ${code} - ${name}`);
+            }
           }
         }
-      } else if (idUpper.includes('DESCR') || idUpper.includes('TITLE')) {
-        if (!text.toLowerCase().includes('view my') && !text.toLowerCase().includes('grade book') && !text.toLowerCase().includes('student view')) {
-          courseObj.courseName = text;
-        }
-      }
-    }
-
-    const isGradeId = gradePatterns.some(pat => idUpper.includes(pat));
-    if (isGradeId) {
-      const parsed = parseGradeFromString(text);
-      if (parsed) {
-        if (parsed.grade) courseObj.grade = parsed.grade;
-        if (parsed.percentage) courseObj.percentage = parsed.percentage;
+        break;
       }
     }
   }
 
-  // Strategy 2: Search tables for course & grade data inside doc
+  // Strategy 2: Search tables for course data inside doc
   const tables = doc.querySelectorAll('table');
   for (const table of tables) {
     const rows = table.querySelectorAll('tr');
@@ -191,10 +126,7 @@ function extractCourseInfo(doc = document) {
 
     const firstRow = rows[0];
     const headers = Array.from(firstRow.querySelectorAll('th, td')).map(el => el.textContent.trim().toUpperCase());
-    
     const crseColIdx = headers.findIndex(h => h.includes('CRSE') || h.includes('COURSE') || h.includes('SUBJECT') || h.includes('CLASS'));
-    const gradeColIdx = headers.findIndex(h => h.includes('GRADE') || h.includes('MARK') || h.includes('GPA'));
-    const pctColIdx = headers.findIndex(h => h.includes('PERCENT') || h.includes('PCT') || h.includes('%'));
 
     if (crseColIdx !== -1) {
       for (let i = 1; i < rows.length; i++) {
@@ -205,59 +137,24 @@ function extractCourseInfo(doc = document) {
         const codeMatch = cellText.match(/\b([A-Z]{2,5}\s*\d{3,4}[A-Z]?)\b/i);
         if (codeMatch) {
           const code = codeMatch[1].replace(/\s+/g, '').toUpperCase();
-          if (isValidCourseCode(code)) {
-            const suffix = `tbl_${table.id || 't'}_row_${i}`;
-            const courseObj = {
-              courseCode: code,
-              courseName: '',
-              grade: '',
-              percentage: '',
-              instructor: ''
-            };
-
+          if (isValidCourseCode(code) && !seenCodes.has(code)) {
+            seenCodes.add(code);
             let name = cellText.replace(codeMatch[0], '').trim();
             name = name.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
-            courseObj.courseName = name || code;
-
-            if (gradeColIdx !== -1 && cells[gradeColIdx]) {
-              const val = cells[gradeColIdx].textContent.trim();
-              if (looksLikeGrade(val)) {
-                courseObj.grade = val;
-              }
-            }
-            if (pctColIdx !== -1 && cells[pctColIdx]) {
-              const val = cells[pctColIdx].textContent.trim();
-              const cleanVal = val.replace('%', '').trim();
-              if (/^\d+(?:\.\d+)?$/.test(cleanVal)) {
-                const num = parseFloat(cleanVal);
-                if (num >= 0 && num <= 100) {
-                  courseObj.percentage = cleanVal;
-                }
-              }
-            }
-
-            courseMap.set(suffix, courseObj);
+            courses.push({
+              courseCode: code,
+              courseName: name || code,
+              instructor: ''
+            });
+            console.log(`${LOG_PREFIX} Found course in table: ${code}`);
           }
         }
       }
     }
   }
 
-  const finalCourses = [];
-  for (const [suffix, courseObj] of courseMap.entries()) {
-    if (courseObj.courseCode && isValidCourseCode(courseObj.courseCode)) {
-      if (!seenCodes.has(courseObj.courseCode)) {
-        seenCodes.add(courseObj.courseCode);
-        if (!courseObj.courseName) {
-          courseObj.courseName = courseObj.courseCode;
-        }
-        finalCourses.push(courseObj);
-      }
-    }
-  }
-
   // Fallback / Strategy 3: Scan all leaf elements for course code pattern
-  if (finalCourses.length === 0) {
+  if (courses.length === 0) {
     const codeToCourse = new Map();
     const allTextElements = doc.querySelectorAll('span, div, td, th, a, h1, h2, h3, h4, b, strong');
     
@@ -282,155 +179,162 @@ function extractCourseInfo(doc = document) {
             codeToCourse.set(courseCode, {
               courseCode: courseCode,
               courseName: courseName || courseCode,
-              instructor: '',
-              grade: '',
-              percentage: ''
+              instructor: ''
             });
           }
         }
       }
     }
 
-    // Single course page grade/percentage association fallback
-    let pageGrade = '';
-    let pagePercentage = '';
-    for (const el of allTextElements) {
-      if (el.children.length > 0) continue;
-      const text = el.textContent.trim();
-      if (!text) continue;
-      const parsed = parseGradeFromString(text);
-      if (parsed) {
-        if (parsed.grade) pageGrade = parsed.grade;
-        if (parsed.percentage) pagePercentage = parsed.percentage;
-      }
-    }
-
     for (const course of codeToCourse.values()) {
-      if (codeToCourse.size === 1) {
-        course.grade = pageGrade;
-        course.percentage = pagePercentage;
+      if (!seenCodes.has(course.courseCode)) {
+        seenCodes.add(course.courseCode);
+        courses.push(course);
+        console.log(`${LOG_PREFIX} Fallback found course: ${course.courseCode} - ${course.courseName}`);
       }
-      finalCourses.push(course);
     }
   }
 
-  return finalCourses.filter(c => c.courseCode && isValidCourseCode(c.courseCode));
+  return courses;
 }
 
 /**
- * Extract grade information from PeopleSoft page doc.
- * @param {Document|Element} doc - Document to scan
+ * Extract overall letter grade independently.
+ * @param {Document|Element} doc
+ * @returns {string} Overall letter grade or empty string
+ */
+function extractOverallGrade(doc = document) {
+  const gradePatterns = ['CRSE_GRADE', 'GRADE_INPUT', 'OVERALL_GRADE'];
+  const allElements = doc.querySelectorAll('[id]');
+  
+  for (const el of allElements) {
+    const id = el.id.toUpperCase();
+    if (gradePatterns.some(pat => id.includes(pat))) {
+      const text = el.textContent.trim();
+      if (looksLikeGrade(text)) {
+        console.log(`[Campus+] Found overall grade by ID (${el.id}): ${text}`);
+        return text.toUpperCase();
+      }
+    }
+  }
+
+  const elements = doc.querySelectorAll('span, div, td, th, b, strong');
+  for (const el of elements) {
+    if (el.children.length > 0) continue;
+    const text = el.textContent.trim();
+    if (looksLikeGrade(text)) {
+      const parentText = el.parentElement ? el.parentElement.textContent.toLowerCase() : '';
+      if (parentText.includes('overall') || parentText.includes('final') || parentText.includes('course grade')) {
+        console.log(`[Campus+] Found overall grade in context scan: ${text}`);
+        return text.toUpperCase();
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Extract overall percentage independently.
+ * @param {Document|Element} doc
+ * @returns {string} Overall percentage value (e.g. "67.50") or empty string
+ */
+function extractOverallPercentage(doc = document) {
+  const elements = doc.querySelectorAll('span, div, td, th, label');
+  const percentagePattern = /\b([1-9]\d(?:\.\d{1,2})?|100(?:\.0+)?)\b/;
+
+  let overallPct = '';
+
+  for (const el of elements) {
+    const text = el.textContent.trim();
+    if (!text) continue;
+
+    if (/overall\s*grade/i.test(text) || /overall\s*percentage/i.test(text) || /overall\s*mark/i.test(text)) {
+      const match = text.match(percentagePattern);
+      if (match) {
+        const val = parseFloat(match[1]);
+        if (val > 0 && val <= 100) {
+          overallPct = match[1];
+          return overallPct;
+        }
+      }
+
+      const parent = el.parentElement;
+      if (parent) {
+        const siblingElements = parent.querySelectorAll('span, div, td');
+        for (const sib of siblingElements) {
+          const sibText = sib.textContent.trim();
+          const match = sibText.match(percentagePattern);
+          if (match) {
+            const val = parseFloat(match[1]);
+            const parentText = parent.textContent.toLowerCase();
+            const containerText = (sib.parentElement ? sib.parentElement.textContent.toLowerCase() : '') + ' ' + parentText;
+            if (containerText.includes('mid-term') || containerText.includes('mid term') || containerText.includes('mst')) {
+              continue;
+            }
+            if (val > 0 && val <= 100) {
+              overallPct = match[1];
+              return overallPct;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const pctPatterns = ['OVERALL_GRADE', 'CRSE_GRADE', 'GRADE_INPUT', 'PERCENT', 'PCT'];
+  const allElements = doc.querySelectorAll('[id]');
+  for (const el of allElements) {
+    const id = el.id.toUpperCase();
+    if (pctPatterns.some(pat => id.includes(pat))) {
+      const text = el.textContent.trim();
+      const match = text.match(percentagePattern);
+      if (match) {
+        const val = parseFloat(match[1]);
+        const parentText = (el.parentElement ? el.parentElement.textContent.toLowerCase() : '');
+        if (parentText.includes('mid-term') || parentText.includes('mid term') || parentText.includes('mst')) {
+          continue;
+        }
+        if (val > 0 && val <= 100) {
+          overallPct = match[1];
+          return overallPct;
+        }
+      }
+    }
+  }
+
+  for (const el of elements) {
+    if (el.children.length > 0) continue;
+    const text = el.textContent.trim();
+    const match = text.match(/^\s*([1-9]\d(?:\.\d{1,2})?|100(?:\.0+)?)\s*%?\s*$/);
+    if (match) {
+      const val = parseFloat(match[1]);
+      const parentText = el.parentElement ? el.parentElement.textContent.toLowerCase() : '';
+      if (parentText.includes('overall') || parentText.includes('final') || parentText.includes('course grade')) {
+        if (parentText.includes('mid-term') || parentText.includes('mid term') || parentText.includes('mst')) {
+          continue;
+        }
+        overallPct = match[1];
+        return overallPct;
+      }
+    }
+  }
+
+  return overallPct;
+}
+
+/**
+ * Expose overall grades wrapper for backward compatibility.
+ * @param {Document|Element} doc
  * @returns {Array<{grade: string, percentage: string}>}
  */
 function extractGrades(doc = document) {
+  const overallGrade = extractOverallGrade(doc);
+  const overallPct = extractOverallPercentage(doc);
   const grades = [];
-  const seen = new Set();
-
-  const gradePatterns = ['GRADE', 'GRD', 'MARK', 'SCORE', 'PERCENTAGE', 'PERCENT', 'GPA'];
-  const allElements = doc.querySelectorAll('[id]');
-
-  for (const el of allElements) {
-    const id = el.id.toUpperCase();
-
-    if (id.includes('PORTLET') || id.includes('MENU') || id.includes('NAV')) {
-      continue;
-    }
-
-    for (const pattern of gradePatterns) {
-      if (id.includes(pattern)) {
-        const text = el.textContent.trim();
-        if (text && !seen.has(id)) {
-          seen.add(id);
-
-          const gradeEntry = { grade: '', percentage: '' };
-
-          if (looksLikeGrade(text)) {
-            if (/^\d+(\.\d+)?%?$/.test(text)) {
-              gradeEntry.percentage = text.replace('%', '').trim();
-              console.log(`${LOG_PREFIX} Found percentage: ${text}`);
-            } else {
-              if (text.toLowerCase().includes('grade book') || text.toLowerCase().includes('assignment')) {
-                continue;
-              }
-              gradeEntry.grade = text.toUpperCase();
-              console.log(`${LOG_PREFIX} Found grade: ${text}`);
-            }
-          }
-
-          if (gradeEntry.grade || gradeEntry.percentage) {
-            grades.push(gradeEntry);
-          }
-        }
-        break;
-      }
-    }
+  if (overallGrade || overallPct) {
+    grades.push({ grade: overallGrade, percentage: overallPct });
   }
-
-  const tables = doc.querySelectorAll('table');
-  for (const table of tables) {
-    const firstRow = table.querySelector('tr');
-    if (!firstRow) continue;
-    const headers = Array.from(firstRow.querySelectorAll('th, td')).map((el) => el.textContent.trim().toUpperCase());
-    
-    const gradeColIdx = headers.findIndex((h) =>
-      h.includes('GRADE') || h.includes('MARK') || h.includes('GPA')
-    );
-    const pctColIdx = headers.findIndex((h) =>
-      h.includes('PERCENT') || h.includes('PCT') || h.includes('%')
-    );
-
-    if (gradeColIdx !== -1 || pctColIdx !== -1) {
-      const rows = table.querySelectorAll('tbody tr, tr:not(:first-child)');
-      for (const row of rows) {
-        const cells = row.querySelectorAll('td');
-        if (cells.length === 0) continue;
-
-        const gradeEntry = { grade: '', percentage: '' };
-        if (gradeColIdx !== -1 && cells[gradeColIdx]) {
-          const val = cells[gradeColIdx].textContent.trim();
-          if (looksLikeGrade(val) && !val.toLowerCase().includes('grade book')) {
-            gradeEntry.grade = val;
-          }
-        }
-        if (pctColIdx !== -1 && cells[pctColIdx]) {
-          const val = cells[pctColIdx].textContent.trim();
-          const cleanVal = val.replace('%', '').trim();
-          if (/^\d+(?:\.\d+)?$/.test(cleanVal)) {
-            const num = parseFloat(cleanVal);
-            if (num >= 0 && num <= 100) {
-              gradeEntry.percentage = cleanVal;
-            }
-          }
-        }
-
-        if ((gradeEntry.grade || gradeEntry.percentage) && !seen.has(JSON.stringify(gradeEntry))) {
-          seen.add(JSON.stringify(gradeEntry));
-          grades.push(gradeEntry);
-          console.log(`${LOG_PREFIX} Found grade in table: ${gradeEntry.grade || gradeEntry.percentage}`);
-        }
-      }
-    }
-  }
-
-  if (grades.length === 0) {
-    const allElements = doc.querySelectorAll('span, div, td, th, b, strong');
-    for (const el of allElements) {
-      if (el.children.length > 0) continue;
-      const text = el.textContent.trim();
-      if (!text) continue;
-
-      const gradeInfo = parseGradeFromString(text);
-      if (gradeInfo) {
-        const key = JSON.stringify(gradeInfo);
-        if (!seen.has(key)) {
-          seen.add(key);
-          grades.push(gradeInfo);
-          console.log(`${LOG_PREFIX} Fallback found grade/percentage:`, gradeInfo);
-        }
-      }
-    }
-  }
-
   return grades;
 }
 
